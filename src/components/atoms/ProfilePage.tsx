@@ -1,27 +1,29 @@
-// src/components/atoms/ProfilePage.tsx
-
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import DataViewerTabs from "./DataViewerTabs.tsx"; // Adjust the path as necessary
+import CSVDataViewer from "./CSVDataViewer.tsx"; // Import CSV viewer component
 
-// Define the shape of the user profile object
+import CSVUploader from "./CSVUploader.tsx"; // Import CSV uploader component
+import XLSXUploader from "./Xsls/XLSXUploader.tsx";
+import UploadedDataViewer from "./Xsls/UploadedDataViewer.tsx";
+
 interface IUserProfile {
   _id: string;
   username: string;
   email: string;
-  bio?: string; // Optional bio field
-  // Extend with additional properties if needed, e.g. profilePicture, memberSince, etc.
+  bio?: string;
 }
 
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
-
-  // State for the user's profile data, loading status, and error message.
   const [profile, setProfile] = useState<IUserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
 
-  // Retrieve the API URL from the environment variables.
+  const [showCSVViewer, setShowCSVViewer] = useState<boolean>(false);
+  const [showXLSXViewer, setShowXLSXViewer] = useState<boolean>(false);
+  const [showCSVUploader, setShowCSVUploader] = useState<boolean>(false);
+  const [showXLSXUploader, setShowXLSXUploader] = useState<boolean>(false);
+
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
   useEffect(() => {
@@ -38,7 +40,6 @@ const ProfilePage: React.FC = () => {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
-            // Pass the token in the Authorization header
             Authorization: `Bearer ${token}`,
           },
         });
@@ -63,15 +64,9 @@ const ProfilePage: React.FC = () => {
     fetchProfile();
   }, [API_URL]);
 
-  // Handle logout by removing token and redirecting to the login page.
   const handleLogout = () => {
     localStorage.removeItem("token");
     navigate("/");
-  };
-
-  // Navigate to CSV Uploader page
-  const goToCsvUploader = () => {
-    navigate("/upload-csv");
   };
 
   if (loading) {
@@ -94,11 +89,9 @@ const ProfilePage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Enhanced Header */}
-      <header className="bg-gradient-to-r from-gray-800 to-gray-900 shadow-lg">
+      <header className="bg-gradient-to-r from-gray-800 to-gray-900">
         <div className="container mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center space-x-3">
-            {/* Logo / Icon */}
             <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-gray-900 font-extrabold">
               DH
             </div>
@@ -106,7 +99,6 @@ const ProfilePage: React.FC = () => {
           </div>
           {profile && (
             <div className="flex items-center space-x-4">
-              {/* User avatar */}
               <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
                 <span className="text-lg text-gray-800 uppercase">
                   {profile.username.charAt(0)}
@@ -125,20 +117,43 @@ const ProfilePage: React.FC = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        {/* Data Viewer Section with CSV Uploader button */}
-        <div className="bg-white rounded-lg shadow-xl p-6 mb-8">
+        {/* Data Viewer Section */}
+        <div className="bg-white rounded-lg p-6 mb-8">
           <div className="flex justify-between items-center mb-4 border-b pb-2">
             <h3 className="text-2xl font-semibold text-gray-800">
               Data Viewer
             </h3>
-            <button
-              onClick={goToCsvUploader}
-              className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded transition duration-200"
-            >
-              Upload CSV
-            </button>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setShowCSVUploader(!showCSVUploader)}
+                className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded transition duration-200"
+              >
+                {showCSVUploader ? "Hide CSV Uploader" : "Upload CSV"}
+              </button>
+              <button
+                onClick={() => setShowXLSXUploader(!showXLSXUploader)}
+                className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded transition duration-200"
+              >
+                {showXLSXUploader ? "Hide XLSX Uploader" : "Upload XLSX"}
+              </button>
+              <button
+                onClick={() => setShowCSVViewer(!showCSVViewer)}
+                className="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded transition duration-200"
+              >
+                {showCSVViewer ? "Hide CSV Viewer" : "View CSV Data"}
+              </button>
+              <button
+                onClick={() => setShowXLSXViewer(!showXLSXViewer)}
+                className="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded transition duration-200"
+              >
+                {showXLSXViewer ? "Hide XLSX Viewer" : "View XLSX Data"}
+              </button>
+            </div>
           </div>
-          <DataViewerTabs />
+          {showCSVUploader && <CSVUploader />}
+          {showXLSXUploader && <XLSXUploader />}
+          {showCSVViewer && <CSVDataViewer />}
+          {showXLSXViewer && <UploadedDataViewer />}
         </div>
       </main>
 

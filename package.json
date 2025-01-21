@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@types/file-saver": "^2.0.7",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.7",
     "@types/react": "^19.0.7",
@@ -12,7 +13,9 @@
     "cra-template-typescript": "1.2.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "file-saver": "^2.0.5",
     "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^0.473.0",
     "mongoose": "^8.9.5",
     "papaparse": "^5.5.1",
     "react": "^19.0.0",
