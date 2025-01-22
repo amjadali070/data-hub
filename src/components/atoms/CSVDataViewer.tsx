@@ -1,27 +1,57 @@
 import React, { useState, useEffect } from "react";
 import { saveAs } from "file-saver";
 import * as XLSX from "xlsx";
+import {
+  Download,
+  FilterX,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Search,
+  SortAsc,
+  SortDesc,
+  Filter,
+} from "lucide-react";
+
+interface DataRecord {
+  data: {
+    [key: string]: string | number;
+  };
+}
+
+type SortDirection = "asc" | "desc";
+
+interface SortConfig {
+  key: string | null;
+  direction: SortDirection;
+}
 
 const CSVDataViewer: React.FC = () => {
-  const [data, setData] = useState<any[]>([]);
-  const [filteredData, setFilteredData] = useState<any[]>([]);
+  const [data, setData] = useState<DataRecord[]>([]);
+  const [filteredData, setFilteredData] = useState<DataRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [filters, setFilters] = useState<{ [key: string]: string }>({});
   const [page, setPage] = useState<number>(1);
   const [limit, setLimit] = useState<number>(10);
   const [totalPages, setTotalPages] = useState<number>(1);
+  const [sortConfig, setSortConfig] = useState<SortConfig>({
+    key: null,
+    direction: "asc",
+  });
+  const [activeFilters, setActiveFilters] = useState<number>(0);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
-
   const fetchData = async () => {
     setLoading(true);
     try {
+      const limitQuery = limit === 0 ? "" : `&limit=${limit}`;
       const response = await fetch(
-        `${API_URL}/api/csv-data?page=${page}&limit=${limit}`
+        `${API_URL}/api/csv-data?page=${page}${limitQuery}`
       );
       const result = await response.json();
       setData(result.data || []);
-      setFilteredData(result.data || []); // Initialize filtered data
+      setFilteredData(result.data || []);
       setTotalPages(result.totalPages || 1);
     } catch (err) {
       console.error("Error fetching CSV data:", err);
@@ -34,27 +64,63 @@ const CSVDataViewer: React.FC = () => {
     fetchData();
   }, [page, limit]);
 
+  useEffect(() => {
+    setActiveFilters(
+      Object.values(filters).filter((value) => value !== "").length
+    );
+  }, [filters]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (openDropdown && !target.closest(".dropdown-menu")) {
+        setOpenDropdown(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [openDropdown]);
+
   const handleFilterChange = (column: string, value: string) => {
     const updatedFilters = { ...filters, [column]: value };
     setFilters(updatedFilters);
 
-    // Apply filters to data
     const newFilteredData = data.filter((item) => {
       return Object.keys(updatedFilters).every((key) => {
-        if (!updatedFilters[key]) return true; // Skip if filter is empty
-        const cellValue = item.data[key]?.toString().toLowerCase() || "";
+        if (!updatedFilters[key]) return true;
+        const cellValue = String(item.data[key] || "").toLowerCase();
         return cellValue.includes(updatedFilters[key].toLowerCase());
       });
     });
 
     setFilteredData(newFilteredData);
-    setPage(1); // Reset to the first page on filter change
+  };
+
+  const handleSort = (key: string) => {
+    let direction: SortDirection = "asc";
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc";
+    }
+    setSortConfig({ key, direction });
+
+    const sortedData = [...filteredData].sort((a, b) => {
+      const aValue = String(a.data[key] || "").toLowerCase();
+      const bValue = String(b.data[key] || "").toLowerCase();
+
+      if (direction === "asc") {
+        return aValue.localeCompare(bValue);
+      }
+      return bValue.localeCompare(aValue);
+    });
+
+    setFilteredData(sortedData);
   };
 
   const handleClearFilters = () => {
     setFilters({});
     setFilteredData(data);
-    setPage(1); // Reset to the first page
+    setSortConfig({ key: null, direction: "asc" });
   };
 
   const handlePageChange = (newPage: number) => {
@@ -63,28 +129,31 @@ const CSVDataViewer: React.FC = () => {
     }
   };
 
-  const handleLimitChange = (newLimit: number) => {
-    setLimit(newLimit);
-    setPage(1); // Reset to the first page on limit change
+  const handleLimitChange = (newLimit: string) => {
+    const parsedLimit = Number(newLimit);
+    if (parsedLimit === 0) {
+      // Fetch all records if "All" is selected
+      setLimit(0);
+      setPage(1);
+    } else {
+      setLimit(parsedLimit);
+      setPage(1);
+    }
   };
 
-  const getHeaders = () => {
+  const getHeaders = (): string[] => {
     if (data.length === 0) return [];
     return Object.keys(data[0].data || {});
   };
 
-  const calculateColumnWidth = (header: string) => {
-    const maxLength = Math.max(
-      header.length,
-      ...filteredData.map((item) => item.data[header]?.toString().length || 0)
-    );
-    return `${Math.min(Math.max(maxLength * 10, 100), 300)}px`;
+  const uniqueValues = (column: string): (string | number)[] => {
+    return Array.from(new Set(data.map((item) => item.data[column] || "N/A")));
   };
 
   const exportToCSV = () => {
     const headers = getHeaders();
     const exportData = filteredData.map((record) => {
-      const row: any = {};
+      const row: { [key: string]: string | number } = {};
       headers.forEach((header) => {
         row[header] = record.data[header] || "N/A";
       });
@@ -106,146 +175,184 @@ const CSVDataViewer: React.FC = () => {
   };
 
   const headers = getHeaders();
-  const uniqueValues = (column: string) => {
-    return Array.from(new Set(data.map((item) => item.data[column] || "N/A")));
-  };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="flex gap-4 mb-4">
-        <button
-          onClick={exportToCSV}
-          className="px-4 py-2 bg-green-500 text-white rounded-lg shadow-md hover:bg-green-600 transition duration-200"
-        >
-          Export Filtered Data to Excel
-        </button>
-        <button
-          onClick={handleClearFilters}
-          className="px-4 py-2 bg-red-500 text-white rounded-lg shadow-md hover:bg-red-600 transition duration-200"
-        >
-          Clear Filters
-        </button>
+    <div className="w-full max-w-[95vw] mx-auto bg-white rounded-lg">
+      <div className="p-6 border-b border-gray-200">
+        <div className="flex justify-between items-center">
+          <h2 className="text-2xl font-bold text-gray-900">CSV Data Viewer</h2>
+          <div className="flex items-center gap-2">
+            {activeFilters > 0 && (
+              <span className="px-2 py-1 text-sm bg-gray-100 text-gray-700 rounded-full">
+                {activeFilters} active filter{activeFilters !== 1 ? "s" : ""}
+              </span>
+            )}
+            <button
+              onClick={handleClearFilters}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              <FilterX className="h-4 w-4" />
+              Clear Filters
+            </button>
+            <button
+              onClick={exportToCSV}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              Export to Excel
+            </button>
+          </div>
+        </div>
       </div>
-      <div className="mb-4">
-        <label
-          htmlFor="rows-per-page"
-          className="mr-2 text-gray-700 font-medium"
-        >
-          Rows per page:
-        </label>
-        <select
-          id="rows-per-page"
-          className="px-3 py-2 border border-gray-400 rounded-lg text-sm focus:outline-none focus:ring focus:ring-blue-400"
-          value={limit}
-          onChange={(e) => handleLimitChange(Number(e.target.value))}
-        >
-          <option value={10}>10</option>
-          <option value={100}>100</option>
-          <option value={500}>500</option>
-          <option value={1000}>1000</option>
-          <option value={5000}>5000</option>
-          <option value={10000}>10000</option>
-          <option value={data.length}>All</option>
-        </select>
-      </div>
-      {loading ? (
-        <div className="text-center text-gray-500">Loading...</div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full bg-gradient-to-r from-blue-100 to-blue-200 border border-gray-300 rounded-lg shadow-md">
-            <thead className="bg-blue-300">
-              <tr>
-                <th
-                  className="py-4 px-6 border border-gray-300 text-left font-semibold text-gray-900"
-                  style={{ width: "50px" }}
-                >
-                  #
-                </th>
-                {headers.map((header, index) => (
-                  <th
-                    key={index}
-                    className="py-4 px-6 border border-gray-300 text-left font-semibold text-gray-900"
-                    style={{ width: calculateColumnWidth(header) }}
-                  >
-                    {header}
-                    <div className="mt-2">
-                      <input
-                        type="text"
-                        placeholder={`Search ${header}`}
-                        className="w-full px-3 py-2 border border-gray-400 rounded-lg text-sm focus:outline-none focus:ring focus:ring-blue-400"
-                        value={filters[header] || ""}
-                        onChange={(e) =>
-                          handleFilterChange(header, e.target.value)
-                        }
-                      />
-                      <select
-                        className="w-full mt-2 px-3 py-2 border border-gray-400 rounded-lg text-sm focus:outline-none focus:ring focus:ring-blue-400"
-                        onChange={(e) =>
-                          handleFilterChange(header, e.target.value)
-                        }
-                        value={filters[header] || ""}
-                      >
-                        <option value="">All</option>
-                        {uniqueValues(header).map((value, i) => (
-                          <option key={i} value={value}>
-                            {value}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+
+      <div className="p-6">
+        <div className="mb-4 flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">
+              Rows per page:
+            </span>
+            <select
+              value={limit}
+              onChange={(e) => handleLimitChange(e.target.value)}
+              className="w-24 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              {[10, 50, 100, 500, 1000, 5000, 10000, "All"].map(
+                (value, index) => (
+                  <option key={index} value={value === "All" ? 0 : value}>
+                    {value === 0 ? "All" : value}
+                  </option>
+                )
+              )}
+            </select>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center p-8">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          </div>
+        ) : (
+          <div className="relative overflow-x-auto rounded-lg border border-gray-200">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-gray-50 text-gray-700">
+                <tr>
+                  <th className="w-16 px-4 py-3 text-center font-medium">
+                    S.No
                   </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredData
-                .slice((page - 1) * limit, page * limit)
-                .map((record, index) => (
+                  {headers.map((header, index) => (
+                    <th key={index} className="min-w-[150px] px-4 py-3">
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{header}</span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleSort(header)}
+                              className="p-1 hover:bg-gray-200 rounded-md"
+                            >
+                              {sortConfig.key === header ? (
+                                sortConfig.direction === "asc" ? (
+                                  <SortAsc className="h-4 w-4" />
+                                ) : (
+                                  <SortDesc className="h-4 w-4" />
+                                )
+                              ) : (
+                                <SortAsc className="h-4 w-4 opacity-50" />
+                              )}
+                            </button>
+                            <div className="relative dropdown-menu">
+                              <button
+                                onClick={() =>
+                                  setOpenDropdown(
+                                    openDropdown === header ? null : header
+                                  )
+                                }
+                                className="p-1 hover:bg-gray-200 rounded-md"
+                              >
+                                <Filter className="h-4 w-4" />
+                              </button>
+                              {openDropdown === header && (
+                                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg border border-gray-200 z-10">
+                                  <div className="p-2">
+                                    <input
+                                      type="text"
+                                      placeholder={`Filter ${header}...`}
+                                      value={filters[header] || ""}
+                                      onChange={(e) =>
+                                        handleFilterChange(
+                                          header,
+                                          e.target.value
+                                        )
+                                      }
+                                      className="w-full px-3 py-2 mb-2 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                    <div className="max-h-48 overflow-y-auto">
+                                      {uniqueValues(header).map((value, i) => (
+                                        <button
+                                          key={i}
+                                          onClick={() => {
+                                            handleFilterChange(
+                                              header,
+                                              String(value)
+                                            );
+                                            setOpenDropdown(null);
+                                          }}
+                                          className="w-full text-left px-3 py-2 hover:bg-gray-100 rounded-md"
+                                        >
+                                          {value}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredData.map((record, index) => (
                   <tr
                     key={index}
-                    className={`${
-                      index % 2 === 0 ? "bg-white" : "bg-gray-50"
-                    } hover:bg-blue-100 transition duration-200`}
+                    className="border-t border-gray-200 hover:bg-gray-50"
                   >
-                    <td
-                      className="py-3 px-6 border border-gray-300 text-gray-700"
-                      style={{ width: "50px" }}
-                    >
-                      {index + 1}
-                    </td>
+                    <td className="px-4 py-3 text-center">{index + 1}</td>
                     {headers.map((header, headerIndex) => (
-                      <td
-                        key={headerIndex}
-                        className="py-3 px-6 border border-gray-300 text-gray-600"
-                        style={{ width: calculateColumnWidth(header) }}
-                      >
+                      <td key={headerIndex} className="px-4 py-3">
                         {record.data[header] || "N/A"}
                       </td>
                     ))}
                   </tr>
                 ))}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="mt-4 flex items-center justify-between">
+          <button
+            onClick={() => handlePageChange(page - 1)}
+            disabled={page === 1}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Previous
+          </button>
+          <span className="text-sm text-gray-600">
+            Page {page} of {totalPages}
+          </span>
+          <button
+            onClick={() => handlePageChange(page + 1)}
+            disabled={page === totalPages}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+            <ChevronRight className="h-4 w-4" />
+          </button>
         </div>
-      )}
-      <div className="flex justify-between items-center mt-6">
-        <button
-          onClick={() => handlePageChange(page - 1)}
-          disabled={page === 1}
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg shadow-md hover:bg-blue-600 transition duration-200 disabled:opacity-50"
-        >
-          Previous
-        </button>
-        <span className="text-gray-800 font-medium">
-          Page {page} of {totalPages}
-        </span>
-        <button
-          onClick={() => handlePageChange(page + 1)}
-          disabled={page === totalPages}
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg shadow-md hover:bg-blue-600 transition duration-200 disabled:opacity-50"
-        >
-          Next
-        </button>
       </div>
     </div>
   );
